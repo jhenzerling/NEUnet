@@ -29,7 +29,7 @@ tf.reset_default_graph()
 #SETTINGS AND EDITING
 
 #Network ON/OFF - Useful for Editing
-trigger = 'ON'
+trigger = True
 #Data Selection
 datatrigger = 'CIFAR10'
 debugtrigger = True
@@ -82,7 +82,7 @@ else:
 
 #RUNNING THE SESSION
 
-if trigger == 'ON':
+if trigger == True:
 
     #Script unit test
     if __name__ == '__main__':
@@ -106,7 +106,7 @@ if trigger == 'ON':
 
     #Set cost function and accuracy
     with tf.variable_scope('CostFunct'):
-        [costfunction,train_step,accuracy] = cost.MNIST_Cost_Setup(y_,net,1e-4)
+        [costfunction,train_step,accuracy] = cost.MNIST_Cost_Setup(y_,net,1e-5)
         tf.summary.scalar("Cost Function", costfunction)
         tf.summary.scalar("Accuracy", accuracy)
 
@@ -143,31 +143,36 @@ if trigger == 'ON':
         #Using batches from dataset to train
         for i in range(stepnumber):
             #Graph Operations
-            ###########
-            summary,acc = sess.run([merged,accuracy], feed_dict={x: trainbatch[0].eval(), y_: trainbatch[1].eval(), keep_prob: 1.0})
-            writer.add_summary(summary,i)
+
+            Etrainbatch0,Etrainbatch1 = sess.run([trainbatch[0],trainbatch[1]])
+            trainfeed = {x: Etrainbatch0, y_: Etrainbatch1, keep_prob: 0.8}
+
+            if graphtrigger == True:
+                summary,acc = sess.run([merged,accuracy], feed_dict=trainfeed)
+                writer.add_summary(summary,i)
 
             #Logging at certain steps
             with tf.variable_scope('Feeding'):
-                if i % (stepnumber/(10)) == 0:
+                if i % (stepnumber/(100)) == 0:
                     ###############
-                    train_accuracy = accuracy.eval(feed_dict={x: trainbatch[0].eval(), y_: trainbatch[1].eval(), keep_prob: 1.0})
+                    train_accuracy = accuracy.eval(feed_dict=trainfeed)
                     print('Step Number: (%d),\t Training Accuracy: (%g),\t Progress: (%d) %%,\t Time: (%d)' % (i, train_accuracy, i*100/stepnumber, time.clock()))
 
             #Training Step
             with tf.variable_scope('Training'):
                 ###############
-                train_step.run(feed_dict={x: trainbatch[0].eval(), y_: trainbatch[1].eval(), keep_prob: 0.5})
+                train_step.run(feed_dict=trainfeed)
 
         #Print the output accuracy
         ###############
-        print('Test Accuracy: (%g)\t' % accuracy.eval(feed_dict={
-                    x: testbatch[0].eval(), y_: testbatch[1].eval(), keep_prob: 1.0}))
+        Etestbatch0,Etestbatch1 = sess.run([testbatch[0],testbatch[1]])
+        testfeed = {x: Etestbatch0, y_: Etestbatch1, keep_prob: 1.0}
+        print('Test Accuracy: (%g)\t' % accuracy.eval(feed_dict=testfeed))
         print('Process Time: (' + str(time.clock()) + ') seconds\t')
 
         #Close out the Threads
-        coord.join(threads)
         coord.request_stop()
+        coord.join(threads)
         
 
 else:
