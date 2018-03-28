@@ -34,13 +34,9 @@ def CIFAR10_plot(trainbatch,hsize,vsize,number):
         coord.request_stop()
         coord.join(threads)
 
-def test_plot(trainbatch,hsize,vsize,number):
-    img_data = (trainbatch[0][number])
-    plt.imshow(img_data)
-    plt.show()
-    print('Which has class: ' + str(trainbatch[1][number]))
+def PSingle_plot():
+#printing for the psingles, possible ROOT
+    return 0
 
-#For Saving the Graph NOT IMPLEMENTED FULLY YET
-#def savegraph():
-
-
+def output_print(step,acc,time,i):
+    print('Training Accuracy: (%g),\t Progress: (%d) %%,\t Time: (%d)' % (acc, i*100/step, time))
