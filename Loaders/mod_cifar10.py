@@ -13,8 +13,8 @@ hsize = 32
 vsize = 32
 colours = 3
 #Training Data Size, Batch Size, and Test Data Size
-stepnumber = 10
-batchsize = 128
+stepnumber = 10000
+batchsize = 512
 testsize = 10000
 #Class Number
 cnumb = 10
@@ -36,8 +36,7 @@ def dataloader(setnumb):
     images = dict['data']
     labels = dict['labels']
    
-    #Assign Image and Label to Flattened Arrays - Allowed for Colour Choice
-    #imagearray = np.array(images).reshape([10000,3,1024])[:,colours,::].reshape([10000,1024*colours])   #   (10000, 3072)
+    #Assign Image and Label to Flattened Arrays
     imagearray = np.array(images)
     labelarray = np.array(labels)   #   (10000,)
     return [imagearray, labelarray]
@@ -84,21 +83,16 @@ def fulldata(pick,asize):
 
 #Load in the training/testing data and assign to sets
 with tf.variable_scope('Cifar10_Data'):
+    #To train with one batch
+    #traincifarsets = setmaker(dataloader(1)[0],dataloader(1)[1],10000)
+    #testcifarsets = setmaker(dataloader(0)[0],dataloader(0)[1],10000)
+
     traincifarsets = fulldata(1,10000)
     testcifarsets = fulldata(0,10000)
 
-    #THE ASSOCIATION IS HERE AS OF CIFARSETS, BROKEN BY THE TRAIN BATCH OPERATION????
-    #ENSURE ASSOCIATION BETWEEN IMAGES AND LABELS
-
-    #m1,m2 = tf.train.slice_input_producer([traincifarsets[0], traincifarsets[1]],shuffle=True)
-    #g1,g2 = tf.train.batch([m1,m2],batch_size=batchsize)
-
     #Assign for use in network
-    #g1,g2 = tf.train.shuffle_batch([traincifarsets[0],traincifarsets[1]], batchsize, num_threads=1, capacity = 50000, enqueue_many=True, allow_smaller_final_batch = False, min_after_dequeue = 10000)
-    #h1,h2 = tf.train.shuffle_batch([testcifarsets[0],testcifarsets[1]], batchsize, num_threads=1, capacity = 50000, enqueue_many=True, allow_smaller_final_batch = False, min_after_dequeue = 10000)
-
-    g1,g2 = tf.train.batch([traincifarsets[0],traincifarsets[1]],batch_size=batchsize,num_threads=1,capacity=50000,enqueue_many=True,allow_smaller_final_batch=True,dynamic_pad=False)
-    h1,h2 = tf.train.batch([testcifarsets[0],testcifarsets[1]],batch_size=batchsize,num_threads=1,capacity=50000,enqueue_many=True,allow_smaller_final_batch=True,dynamic_pad=False)
+    g1,g2 = tf.train.shuffle_batch([traincifarsets[0],traincifarsets[1]], batchsize, num_threads=1, capacity = 50000, enqueue_many=True, allow_smaller_final_batch = False, min_after_dequeue = 10000)
+    h1,h2 = tf.train.shuffle_batch([testcifarsets[0],testcifarsets[1]], batchsize, num_threads=1, capacity = 50000, enqueue_many=True, allow_smaller_final_batch = False, min_after_dequeue = 10000)
 
     trainbatch = [g1,g2]
     testbatch = [h1,h2]
@@ -111,3 +105,5 @@ def get_trainparams():
 
 def get_batch():
     return [trainbatch,testbatch]
+
+

@@ -29,13 +29,13 @@ tf.reset_default_graph()
 #SETTINGS AND EDITING
 
 #Network ON/OFF - Useful for Editing
-trigger = 'ON'
+trigger = False
 #Data Selection
-datatrigger = 'CIFAR10'
+datatrigger = 'PSingle'
 debugtrigger = True
 traintrigger = True
 plottrigger = False
-graphtrigger = True
+graphtrigger = False
 
 #################################################################################################################
 
@@ -48,10 +48,6 @@ if datatrigger == 'CIFAR10':
         [hsize,vsize,colours,cnumb] = mod_cifar10.get_dataparams()
         [stepnumber,batchsize,testsize] = mod_cifar10.get_trainparams()
         [trainbatch,testbatch] = mod_cifar10.get_batch()
-
-        #CIFAR10plot works for associating labels/images
-        #log.CIFAR10_plot(testbatch,hsize,vsize,5)
-        #log.CIFAR10_plot(testbatch,hsize,vsize,35)
 
     if(plottrigger == True):
         number = int(raw_input('Enter Image Number to Plot: '))
@@ -73,6 +69,20 @@ elif datatrigger == 'MNIST':
 
     #################################################################################################################
 
+elif datatrigger == 'PSingle':
+    print('Utilizing PSingle Data.')
+    from Loaders import mod_psingle
+    with tf.variable_scope('PSingle'):
+        [hsize,vsize,colours,cnumb] = mod_psingle.get_dataparams()
+        #[stepnumber,batchsize,testsize] = mod_psingle.get_trainparams()
+        #[trainbatch, testbatch] = mod_psingle.get_batch()
+
+    if(plottrigger == True):
+        number = int(raw_input('Enter Image Number to Plot: '))
+        #log.PSingle_plot(trainbatch,hsize,vsize,number)
+
+    #################################################################################################################
+
 #ERROR CATCHING
 else:
     print('Incorrect Data Selection - Terminating')
@@ -82,7 +92,7 @@ else:
 
 #RUNNING THE SESSION
 
-if trigger == 'ON':
+if trigger == True:
 
     #Script unit test
     if __name__ == '__main__':
@@ -92,7 +102,6 @@ if trigger == 'ON':
             x = tf.placeholder(tf.float32, [None,hsize,vsize,colours])
         net,end_points = network.build(x,cnumb,traintrigger,debugtrigger)
         tf.contrib.layers.summarize_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-
 
         #Create Placeholder of possible results
         with tf.variable_scope('Result'):
@@ -106,7 +115,7 @@ if trigger == 'ON':
 
     #Set cost function and accuracy
     with tf.variable_scope('CostFunct'):
-        [costfunction,train_step,accuracy] = cost.MNIST_Cost_Setup(y_,net,1e-4)
+        [costfunction,train_step,accuracy] = cost.MNIST_Cost_Setup(y_,net,1e-5)
         tf.summary.scalar("Cost Function", costfunction)
         tf.summary.scalar("Accuracy", accuracy)
 
@@ -140,35 +149,39 @@ if trigger == 'ON':
             print('tensorboard --logdir=run1:/user/jhenzerling/work/neunet/Graphs/ --port 8008')
             writer=tf.summary.FileWriter('Graphs', sess.graph)
 
+        #Put batches into the same queue
+        Qtrainbatch0,Qtrainbatch1 = sess.run([trainbatch[0],trainbatch[1]])
+        trainfeed = {x: Qtrainbatch0, y_: Qtrainbatch1, keep_prob: 0.8}
+
         #Using batches from dataset to train
         for i in range(stepnumber):
+
             #Graph Operations
-            ###########
-            summary,acc = sess.run([merged,accuracy], feed_dict={x: trainbatch[0].eval(), y_: trainbatch[1].eval(), keep_prob: 1.0})
-            writer.add_summary(summary,i)
+            if graphtrigger == True:
+                summary,acc = sess.run([merged,accuracy], feed_dict=trainfeed)
+                writer.add_summary(summary,i)
 
             #Logging at certain steps
             with tf.variable_scope('Feeding'):
                 if i % (stepnumber/(10)) == 0:
-                    ###############
-                    train_accuracy = accuracy.eval(feed_dict={x: trainbatch[0].eval(), y_: trainbatch[1].eval(), keep_prob: 1.0})
-                    print('Step Number: (%d),\t Training Accuracy: (%g),\t Progress: (%d) %%,\t Time: (%d)' % (i, train_accuracy, i*100/stepnumber, time.clock()))
-
+                    train_accuracy = accuracy.eval(feed_dict=trainfeed)
+                    log.output_print(stepnumber,train_accuracy,time.clock(),i)
+                   
             #Training Step
             with tf.variable_scope('Training'):
-                ###############
-                train_step.run(feed_dict={x: trainbatch[0].eval(), y_: trainbatch[1].eval(), keep_prob: 0.5})
+                train_step.run(feed_dict=trainfeed)
 
         #Print the output accuracy
-        ###############
-        print('Test Accuracy: (%g)\t' % accuracy.eval(feed_dict={
-                    x: testbatch[0].eval(), y_: testbatch[1].eval(), keep_prob: 1.0}))
+        #Input batches into the same queue
+        Qtestbatch0,Qtestbatch1 = sess.run([testbatch[0],testbatch[1]])
+        testfeed = {x: Qtestbatch0, y_: Qtestbatch1, keep_prob: 1.0}
+        print('Test Accuracy: (%g)\t' % accuracy.eval(feed_dict=testfeed))
         print('Process Time: (' + str(time.clock()) + ') seconds\t')
 
         #Close out the Threads
-        coord.join(threads)
         coord.request_stop()
-        
+        coord.join(threads)
+        writer.close()
 
 else:
     print('Trigger not ON. Terminating')
