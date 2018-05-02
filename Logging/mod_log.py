@@ -4,6 +4,9 @@ import sys
 import numpy as np
 import tensorflow as tf
 from matplotlib import pyplot as plt
+from larcv import larcv
+import ROOT
+from Configs import config_main as config
 
 #MNIST plotter to check inputs
 def MNIST_plot(trainbatch,hsize,vsize,number):
@@ -34,9 +37,17 @@ def CIFAR10_plot(trainbatch,hsize,vsize,number):
         coord.request_stop()
         coord.join(threads)
 
-def PSingle_plot():
-#printing for the psingles, possible ROOT
-    return 0
+#Plot a single PSingle Event
+def PSingle_plot(image,label,dim,number):
+    image_reshaped = image.reshape(dim[:-1])
+    fig,ax = plt.subplots(figsize=(8,8))
+    plt.imshow(image_reshaped[number],cmap='jet',interpolation='none')
+    plt.show()
 
-def output_print(step,acc,time,i):
-    print('Training Accuracy: (%g),\t Progress: (%d) %%,\t Time: (%d)' % (acc, i*100/step, time))
+##################################################################################################
+
+#Output training data to screen
+def outputprint(step,tracc,teacc,trloss,teloss,time,i):
+    print('Progress: (%g) %%, \t\t\t Time: (%d)' % (i*100/step, time))
+    print('Training Accuracy: (%g), \t\t\t Training Loss: (%g)' % (tracc, trloss))
+    print('Testing Accuracy: (%g), \t\t\t Testing Loss: (%g)' % (teacc, teloss))
