@@ -1,3 +1,5 @@
+#Network Training Module
+
 #################################################################################################################
 
 #LIBRARIES AND BACKGROUND
@@ -7,20 +9,33 @@ import numpy as np
 
 #File Handling
 from Logging import mod_log as log
-#from matplotlib import pyplot as plt
-import sys
-import time
-import datetime
-time.clock()
+from Logging import mod_graph as graph
+import sys,os,time,datetime
+#Suppress extra warnings for readability
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+#from tensorflow.python.client import device_lib
+#print device_lib.list_local_devices()
+#Start Clock for timing
+start = time.time()
 
 #Machine Learning Handling
 from Machine_Learning import Cost as cost
 from Machine_Learning import Network as network
+from Machine_Learning import Learning as learn
 
 #Tensorflow Libraries
 import tensorflow.contrib.slim as slim
 import tensorflow.python.platform
 import tensorflow as tf
+
+#LARCV
+from larcv import larcv
+from larcv.dataloader2 import larcv_threadio
+
+#Main Configuration
+from Configs import config_main as config
 
 tf.reset_default_graph()
 
@@ -29,13 +44,19 @@ tf.reset_default_graph()
 #SETTINGS AND EDITING
 
 #Network ON/OFF - Useful for Editing
-trigger = False
+trigger = config.MAIN['Trigger']
+archi = config.MAIN['Archi']
 #Data Selection
-datatrigger = 'PSingle'
-debugtrigger = True
-traintrigger = True
-plottrigger = False
-graphtrigger = False
+datatrigger = config.MAIN['Data']
+debugtrigger = config.MAIN['Debug']
+traintrigger = config.MAIN['Train']
+plottrigger = config.MAIN['Plot']
+graphtrigger = config.MAIN['Graph']
+loggingnumber = config.MAIN['Logging']
+
+#Numbers
+learnrate = config.LEARN['Rate']
+saverate = config.MAIN['Save']
 
 #################################################################################################################
 
@@ -70,16 +91,18 @@ elif datatrigger == 'MNIST':
     #################################################################################################################
 
 elif datatrigger == 'PSingle':
+    #In this module the batching is done differently so we need extra steps here
     print('Utilizing PSingle Data.')
     from Loaders import mod_psingle
     with tf.variable_scope('PSingle'):
         [hsize,vsize,colours,cnumb] = mod_psingle.get_dataparams()
-        #[stepnumber,batchsize,testsize] = mod_psingle.get_trainparams()
-        #[trainbatch, testbatch] = mod_psingle.get_batch()
+        [stepnumber,batchsize,testsize,trainsize] = mod_psingle.get_trainparams()
+        [trproc,teproc] = mod_psingle.get_proc()
+        [rawinput,labinput,input2d] = mod_psingle.get_Input()
 
     if(plottrigger == True):
         number = int(raw_input('Enter Image Number to Plot: '))
-        #log.PSingle_plot(trainbatch,hsize,vsize,number)
+        log.PSingle_plot(trainbatch,hsize,vsize,number)
 
     #################################################################################################################
 
@@ -99,15 +122,29 @@ if trigger == True:
     
         #Creating placeholder in shape of input image
         with tf.variable_scope('Input_Tensor'):
-            x = tf.placeholder(tf.float32, [None,hsize,vsize,colours])
-        net,end_points = network.build(x,cnumb,traintrigger,debugtrigger)
+            if datatrigger == 'PSingle':
+                x = input2d
+            else:
+                x = tf.placeholder(tf.float32, [None,hsize,vsize,colours], name = 'input')
+        if archi == 'B1':
+            print('Using Architecture 1')
+            net,end_points = network.build(x,cnumb,traintrigger,debugtrigger)
+        elif archi == 'B2':
+            print('Using Architecture 2')
+            net,end_points = network.build2(x,cnumb,traintrigger,debugtrigger)
+        else:
+            print('Invalid Architecture')
+
         tf.contrib.layers.summarize_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
         #Create Placeholder of possible results
         with tf.variable_scope('Result'):
-            y_ = tf.placeholder(tf.float32, shape=[None, cnumb])
+            if datatrigger == 'PSingle':
+                y_ = labinput
+            else:
+                y_ = tf.placeholder(tf.float32, shape=[None, cnumb], name = 'result')
         with tf.variable_scope('Keep_Prob'):
-            keep_prob = tf.placeholder(tf.float32)
+            keep_prob = tf.placeholder(tf.float32, name = 'keep_prob')
 
 ###########################################################################################################
 
@@ -115,13 +152,16 @@ if trigger == True:
 
     #Set cost function and accuracy
     with tf.variable_scope('CostFunct'):
-        [costfunction,train_step,accuracy] = cost.MNIST_Cost_Setup(y_,net,1e-5)
+        [costfunction,train_step,accuracy] = cost.PSingle_Cost_Setup(y_,net,learnrate)
         tf.summary.scalar("Cost Function", costfunction)
         tf.summary.scalar("Accuracy", accuracy)
+        
+    if datatrigger == 'PSingle':
+        with tf.variable_scope('Save_Images'):
+            tf.summary.image('train_input',mod_psingle.formatTensors(mod_psingle.allocate('train',trproc))[0],10)
 
     #Histograms for Tensorboard
-    for var in tf.trainable_variables():
-        tf.summary.histogram(var.name,var,collections=["my_summ"])
+    graph.setHistograms('my_summ')
 
     #SETTING UP TENSORBOARD GRAPH
     if graphtrigger == True:
@@ -135,57 +175,64 @@ if trigger == True:
     with tf.Session(config=config) as sess:
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord = coord)
-
         #Initialize the nodes and variables
         with tf.variable_scope('Session'):
             init = tf.global_variables_initializer()
             sess.run(init)
-
         #Log the graph
         if graphtrigger == True:
-            tf.trainable_variables(tf.GraphKeys.GLOBAL_VARIABLES)
-            merged = tf.summary.merge_all()
-            print('CALL THE FOLLOWING COMMAND FOR TENSORBOARD: ')
-            print('tensorboard --logdir=run1:/user/jhenzerling/work/neunet/Graphs/ --port 8008')
-            writer=tf.summary.FileWriter('Graphs', sess.graph)
-
-        #Put batches into the same queue
-        Qtrainbatch0,Qtrainbatch1 = sess.run([trainbatch[0],trainbatch[1]])
-        trainfeed = {x: Qtrainbatch0, y_: Qtrainbatch1, keep_prob: 0.8}
-
+            graph.TBPrint()
+            [writertrain,writertest,merged] = graph.setSummaries(sess)
+            saver = tf.train.Saver()
         #Using batches from dataset to train
         for i in range(stepnumber):
-
-            #Graph Operations
-            if graphtrigger == True:
-                summary,acc = sess.run([merged,accuracy], feed_dict=trainfeed)
-                writer.add_summary(summary,i)
-
+            if datatrigger == 'PSingle':
+                trproc.next()
+                trainfeed = learn.PSingle_Feeds(trproc,rawinput,y_,'train')
+            elif datatrigger == 'CIFAR10':
+                [trainfeed,testfeed] = learn.CIFAR10_Feeds(trainbatch[0],trainbatch[1],x,y_)
+            elif datatrigger == 'MNIST':
+                [trainfeed,testfeed] = learn.MNIST_Feeds(trainbatch[0],trainbatch[1],x,y_)
+            else:
+                print('Bad Train and/or Test Feeds')
+                    
             #Logging at certain steps
             with tf.variable_scope('Feeding'):
-                if i % (stepnumber/(10)) == 0:
+                if i % (stepnumber/(loggingnumber)) == 0:
+                    if datatrigger == 'PSingle':
+                        teproc.next()
+                        testfeed = learn.PSingle_Feeds(teproc,rawinput,y_,'test')
+
+                    #Graph Operations
+                    if graphtrigger == True:
+                        [summarytrain,acctrain,summarytest,acctest] = graph.SummFeeder(merged,
+                                                                    accuracy,sess,trainfeed,testfeed)
+                        graph.SummAdder(writertrain,writertest,summarytrain,summarytest,i)
                     train_accuracy = accuracy.eval(feed_dict=trainfeed)
-                    log.output_print(stepnumber,train_accuracy,time.clock(),i)
+                    test_accuracy = accuracy.eval(feed_dict=testfeed)
+                    train_loss = costfunction.eval(feed_dict=trainfeed)
+                    test_loss = costfunction.eval(feed_dict=testfeed)
+                    log.outputprint(stepnumber,train_accuracy,test_accuracy,
+                                    train_loss,test_loss,start - time.time(),i)
                    
             #Training Step
             with tf.variable_scope('Training'):
                 train_step.run(feed_dict=trainfeed)
-
-        #Print the output accuracy
-        #Input batches into the same queue
-        Qtestbatch0,Qtestbatch1 = sess.run([testbatch[0],testbatch[1]])
-        testfeed = {x: Qtestbatch0, y_: Qtestbatch1, keep_prob: 1.0}
-        print('Test Accuracy: (%g)\t' % accuracy.eval(feed_dict=testfeed))
-        print('Process Time: (' + str(time.clock()) + ') seconds\t')
+        
+            #Log Weights 2x as often as Logging
+            if i % saverate == 0:
+                ssf_path = saver.save(sess, 'Weights/neunet',global_step=i)
 
         #Close out the Threads
         coord.request_stop()
         coord.join(threads)
-        writer.close()
+        if graphtrigger == True:
+            graph.WCloser(writertrain,writertest)
 
 else:
     print('Trigger not ON. Terminating')
-    print('Process Time: ' + str(time.clock()) + ' seconds')
+    end = time.time()
+    print('Process Time: ' + str(end - start) + ' seconds')
     quit()
 
 ###########################################################################################################
