@@ -28,19 +28,19 @@ from Configs import config_main as config
 
 #Set up MNIST/CIFAR Feeds
 
-def MNIST_Feeds(a,b,c,d):
+def MNIST_Feeds(a,b,c,d,sess,keep_prob):
 	Qtrainbatch0,Qtrainbatch1 = sess.run([a,b])
         Qtestbatch0,Qtestbatch1 = sess.run([a,b])
 	trainfeed = {c: Qtrainbatch0, d: Qtrainbatch1, keep_prob: 0.8}
-        testfeed = {d: Qtestbatch0, d: Qtestbatch1, keep_prob: 1.0}
+        testfeed = {c: Qtestbatch0, d: Qtestbatch1, keep_prob: 1.0}
 
 	return [trainfeed,testfeed]
 
-def CIFAR10_Feeds(a,b,c,d):
+def CIFAR10_Feeds(a,b,c,d,sess,keep_prob):
 	Qtrainbatch0,Qtrainbatch1 = sess.run([a,b])
         Qtestbatch0,Qtestbatch1 = sess.run([a,b])
 	trainfeed = {c: Qtrainbatch0, d: Qtrainbatch1, keep_prob: 0.8}
-        testfeed = {d: Qtestbatch0, d: Qtestbatch1, keep_prob: 1.0}
+        testfeed = {c: Qtestbatch0, d: Qtestbatch1, keep_prob: 1.0}
 
 	return [trainfeed,testfeed]
 
