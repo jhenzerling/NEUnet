@@ -1,0 +1,1 @@
+Where images are stored.
